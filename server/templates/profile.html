@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Profile{% endblock %}
+{% block content %}
+<div class="govuk-grid-row">
+  <div class="govuk-grid-column-two-thirds">
+
+    {% if error %}
+    <div class="govuk-error-summary" data-module="govuk-error-summary">
+      <div role="alert">
+        <h2 class="govuk-error-summary__title">There is a problem</h2>
+        <div class="govuk-error-summary__body">
+          <ul class="govuk-list govuk-error-summary__list">
+            <li><a href="#current">{{ error }}</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if notice %}
+    <div class="govuk-notification-banner govuk-notification-banner--success" role="alert"
+         aria-labelledby="notice-title" data-module="govuk-notification-banner">
+      <div class="govuk-notification-banner__header">
+        <h2 class="govuk-notification-banner__title" id="notice-title">Success</h2>
+      </div>
+      <div class="govuk-notification-banner__content">
+        <p class="govuk-notification-banner__heading">{{ notice }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    <h1 class="govuk-heading-l">Profile</h1>
+
+    <dl class="govuk-summary-list govuk-!-margin-bottom-8">
+      <div class="govuk-summary-list__row">
+        <dt class="govuk-summary-list__key">Username</dt>
+        <dd class="govuk-summary-list__value">{{ info.username }}</dd>
+      </div>
+      <div class="govuk-summary-list__row">
+        <dt class="govuk-summary-list__key">Account created</dt>
+        <dd class="govuk-summary-list__value">{{ info.created_at[:10] if info.created_at else '—' }}</dd>
+      </div>
+      <div class="govuk-summary-list__row">
+        <dt class="govuk-summary-list__key">Active sessions</dt>
+        <dd class="govuk-summary-list__value">{{ info.sessions }}</dd>
+      </div>
+    </dl>
+
+    <h2 class="govuk-heading-m">Change password</h2>
+    <form method="post" action="/profile">
+      <input type="hidden" name="action" value="password">
+      <div class="govuk-form-group">
+        <label class="govuk-label" for="current">Current password</label>
+        <input class="govuk-input govuk-input--width-20" id="current" name="current"
+               type="password" autocomplete="current-password" required>
+      </div>
+      <div class="govuk-form-group">
+        <label class="govuk-label" for="new">New password</label>
+        <div id="new-hint" class="govuk-hint">Must be at least 8 characters.</div>
+        <input class="govuk-input govuk-input--width-20" id="new" name="new" type="password"
+               aria-describedby="new-hint" autocomplete="new-password" required>
+      </div>
+      <button type="submit" class="govuk-button" data-module="govuk-button">Change password</button>
+    </form>
+
+    <h2 class="govuk-heading-m">Other devices</h2>
+    <p class="govuk-body">
+      Sign out everywhere else. This device stays signed in.
+    </p>
+    <form method="post" action="/profile">
+      <input type="hidden" name="action" value="revoke">
+      <button type="submit" class="govuk-button govuk-button--secondary" data-module="govuk-button">
+        Sign out other sessions
+      </button>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

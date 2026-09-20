@@ -26,6 +26,10 @@ STATE = Path(os.environ.get("LOCI_STATE") or (Path.home() / ".local/state/loci")
 RSD_FILE = STATE / "rsd"
 UDID = os.environ.get("IPHONE_UDID") or None
 RETRY_SECONDS = 10
+# After this many fruitless discovery passes, exit so launchd restarts us with
+# fresh state. A sleeping phone simply stops advertising, which is normal, but
+# discovery can also wedge, and only a new process clears that.
+MAX_EMPTY_ROUNDS = 30
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s loci-tunnel %(levelname)s %(message)s"
@@ -56,11 +60,12 @@ def retract() -> None:
     RSD_FILE.unlink(missing_ok=True)
 
 
-async def serve_once() -> None:
+async def serve_once() -> bool:
+    """Returns True if a tunnel was established."""
     services = await get_remote_pairing_tunnel_services(udid=UDID)
     if not services:
         log.info("no tunnel services discovered")
-        return
+        return False
     # Discovery lists each device once per address. Without a UDID pin, ranking
     # sorts on address shape alone, so two paired phones would both rank 0 and
     # the winner would be whichever discovery happened to return first.
@@ -72,7 +77,7 @@ async def serve_once() -> None:
             len(identifiers),
             ", ".join(sorted(identifiers)),
         )
-        return
+        return False
     service = sorted(services, key=rank)[0]
     log.info("selected %s:%s", service.hostname, service.port)
     async with start_tunnel(service) as result:
@@ -83,6 +88,7 @@ async def serve_once() -> None:
         finally:
             retract()
             log.info("tunnel closed")
+    return True
 
 
 async def main() -> None:
@@ -90,12 +96,21 @@ async def main() -> None:
     # real one, a stale file would send `loci` at a dead tunnel instead of
     # letting it fall back to USB.
     retract()
+    empty = 0
     while True:
         try:
-            await serve_once()
+            if await serve_once():
+                empty = 0
+            else:
+                empty += 1
         except Exception as exc:  # noqa: BLE001 - keep the supervisor alive
             retract()
+            empty += 1
             log.error("%s: %s", type(exc).__name__, exc)
+        if empty >= MAX_EMPTY_ROUNDS:
+            log.error("no tunnel after %d attempts; exiting for a clean restart", empty)
+            retract()
+            raise SystemExit(1)
         await asyncio.sleep(RETRY_SECONDS)
 
 

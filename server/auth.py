@@ -67,7 +67,8 @@ def _iso(dt: datetime) -> str:
 
 
 @contextmanager
-def _db():
+def connection():
+    """Shared handle so store.py writes to the same database file."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
@@ -80,13 +81,13 @@ def _db():
 
 
 def init_db() -> None:
-    with _db() as conn:
+    with connection() as conn:
         conn.executescript(SCHEMA)
     DB_PATH.chmod(0o600)
 
 
 def has_users() -> bool:
-    with _db() as conn:
+    with connection() as conn:
         return conn.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
 
 
@@ -95,7 +96,7 @@ def create_user(username: str, password: str) -> None:
         raise ValueError("username and password are required")
     if len(password) < 8:
         raise ValueError("password must be at least 8 characters")
-    with _db() as conn:
+    with connection() as conn:
         conn.execute(
             "INSERT INTO users (username, pw_hash, created_at) VALUES (?, ?, ?)",
             (username, generate_password_hash(password), _iso(_now())),
@@ -103,19 +104,19 @@ def create_user(username: str, password: str) -> None:
 
 
 def delete_user(username: str) -> bool:
-    with _db() as conn:
+    with connection() as conn:
         cur = conn.execute("DELETE FROM users WHERE username = ?", (username,))
         return cur.rowcount > 0
 
 
 def list_users() -> list[str]:
-    with _db() as conn:
+    with connection() as conn:
         return [r["username"] for r in conn.execute("SELECT username FROM users ORDER BY username")]
 
 
 def locked_out(ip: str) -> bool:
     cutoff = _iso(_now() - timedelta(minutes=LOCKOUT_MINUTES))
-    with _db() as conn:
+    with connection() as conn:
         conn.execute("DELETE FROM login_failures WHERE at < ?", (cutoff,))
         n = conn.execute(
             "SELECT COUNT(*) AS n FROM login_failures WHERE ip = ? AND at >= ?", (ip, cutoff)
@@ -124,19 +125,19 @@ def locked_out(ip: str) -> bool:
 
 
 def _record_failure(ip: str) -> None:
-    with _db() as conn:
+    with connection() as conn:
         conn.execute("INSERT INTO login_failures (ip, at) VALUES (?, ?)", (ip, _iso(_now())))
 
 
 def verify_user(username: str, password: str, ip: str) -> Optional[int]:
-    with _db() as conn:
+    with connection() as conn:
         row = conn.execute(
             "SELECT id, pw_hash FROM users WHERE username = ?", (username,)
         ).fetchone()
     # Hash even when the user is unknown, so timing does not leak existence.
     expected = row["pw_hash"] if row else generate_password_hash("_no_such_user_")
     if row and check_password_hash(expected, password):
-        with _db() as conn:
+        with connection() as conn:
             conn.execute("DELETE FROM login_failures WHERE ip = ?", (ip,))
         return int(row["id"])
     check_password_hash(expected, password)
@@ -151,7 +152,7 @@ def _hash_token(token: str) -> str:
 def create_session(user_id: int, user_agent: str = "") -> str:
     token = secrets.token_urlsafe(32)
     now = _now()
-    with _db() as conn:
+    with connection() as conn:
         conn.execute("DELETE FROM sessions WHERE expires_at < ?", (_iso(now),))
         conn.execute(
             "INSERT INTO sessions (token_hash, user_id, created_at, expires_at, user_agent)"
@@ -170,7 +171,7 @@ def create_session(user_id: int, user_agent: str = "") -> str:
 def validate_session(token: str) -> Optional[int]:
     if not token:
         return None
-    with _db() as conn:
+    with connection() as conn:
         row = conn.execute(
             "SELECT user_id, expires_at FROM sessions WHERE token_hash = ?",
             (_hash_token(token),),
@@ -184,23 +185,64 @@ def validate_session(token: str) -> Optional[int]:
 
 
 def delete_session(token: str) -> None:
-    with _db() as conn:
+    with connection() as conn:
         conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_hash_token(token),))
 
 
 def revoke_all_sessions() -> int:
-    with _db() as conn:
+    with connection() as conn:
         return conn.execute("DELETE FROM sessions").rowcount
 
 
 def username_for(user_id: int) -> str:
-    with _db() as conn:
+    with connection() as conn:
         row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
     return row["username"] if row else "?"
 
 
+def user_info(user_id: int) -> dict:
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT id, username, created_at FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        sessions = conn.execute(
+            "SELECT COUNT(*) AS n FROM sessions WHERE user_id = ? AND expires_at >= ?",
+            (user_id, _iso(_now())),
+        ).fetchone()["n"]
+    info = dict(row) if row else {}
+    info["sessions"] = sessions
+    return info
+
+
+def change_password(user_id: int, current: str, new: str) -> None:
+    if len(new) < 8:
+        raise ValueError("new password must be at least 8 characters")
+    with connection() as conn:
+        row = conn.execute("SELECT pw_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row or not check_password_hash(row["pw_hash"], current):
+        raise ValueError("current password is incorrect")
+    with connection() as conn:
+        conn.execute(
+            "UPDATE users SET pw_hash = ? WHERE id = ?",
+            (generate_password_hash(new), user_id),
+        )
+
+
+def revoke_user_sessions(user_id: int, keep: Optional[str] = None) -> int:
+    """Sign out everywhere. `keep` preserves the caller's own session."""
+    with connection() as conn:
+        if keep:
+            cur = conn.execute(
+                "DELETE FROM sessions WHERE user_id = ? AND token_hash != ?",
+                (user_id, _hash_token(keep)),
+            )
+        else:
+            cur = conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        return cur.rowcount
+
+
 def log(user_id: Optional[int], action: str, detail: str = "", ip: str = "") -> None:
-    with _db() as conn:
+    with connection() as conn:
         conn.execute(
             "INSERT INTO audit (user_id, action, detail, ip, at) VALUES (?, ?, ?, ?, ?)",
             (user_id, action, detail, ip, _iso(_now())),
@@ -208,7 +250,7 @@ def log(user_id: Optional[int], action: str, detail: str = "", ip: str = "") -> 
 
 
 def recent_audit(limit: int = 50) -> list[dict]:
-    with _db() as conn:
+    with connection() as conn:
         rows = conn.execute(
             "SELECT a.at, a.action, a.detail, a.ip, COALESCE(u.username,'-') AS username"
             " FROM audit a LEFT JOIN users u ON u.id = a.user_id"

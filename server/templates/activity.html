@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Activity{% endblock %}
+{% block content %}
+<h1 class="govuk-heading-l">Activity</h1>
+<p class="govuk-body">The 50 most recent actions on this service.</p>
+
+{% if rows %}
+<table class="govuk-table loci-cards">
+  <caption class="govuk-table__caption govuk-visually-hidden">Recent activity</caption>
+  <thead class="govuk-table__head">
+    <tr class="govuk-table__row">
+      <th scope="col" class="govuk-table__header">When</th>
+      <th scope="col" class="govuk-table__header">Who</th>
+      <th scope="col" class="govuk-table__header">Action</th>
+      <th scope="col" class="govuk-table__header">Detail</th>
+      <th scope="col" class="govuk-table__header">From</th>
+    </tr>
+  </thead>
+  <tbody class="govuk-table__body">
+    {% for r in rows %}
+    <tr class="govuk-table__row">
+      <td class="govuk-table__cell" data-label="When">{{ r.at[:19].replace('T', ' ') }}</td>
+      <td class="govuk-table__cell" data-label="Who">{{ r.username }}</td>
+      <td class="govuk-table__cell" data-label="Action">{{ r.action }}</td>
+      <td class="govuk-table__cell" data-label="Detail">{{ r.detail }}</td>
+      <td class="govuk-table__cell" data-label="From">{{ r.ip }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="govuk-body">Nothing recorded yet.</p>
+{% endif %}
+{% endblock %}

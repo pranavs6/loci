@@ -1,65 +1,39 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>loci</title>
-<style>
-  :root {
-    --bg: #f6f7f9; --panel: #ffffff; --text: #14171a; --muted: #6b7280;
-    --line: #e2e5ea; --accent: #2563eb; --accent-text: #fff; --danger: #dc2626;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0e1116; --panel: #171b22; --text: #e8eaed; --muted: #9aa3af;
-      --line: #262c36; --accent: #3b82f6; --accent-text: #fff; --danger: #ef4444;
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text);
-    font: 15px/1.45 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    display: grid; place-items: center; padding: 24px;
-  }
-  form {
-    width: 100%; max-width: 340px; background: var(--panel);
-    border: 1px solid var(--line); border-radius: 16px; padding: 24px;
-    display: flex; flex-direction: column; gap: 14px;
-  }
-  h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
-  p.sub { margin: 0; color: var(--muted); font-size: 13.5px; }
-  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 5px; }
-  input {
-    width: 100%; padding: 11px 12px; font-size: 16px; color: var(--text);
-    background: var(--bg); border: 1px solid var(--line); border-radius: 10px; outline: none;
-  }
-  input:focus { border-color: var(--accent); }
-  button {
-    padding: 13px; font-size: 16px; font-weight: 600; border: 0; border-radius: 12px;
-    background: var(--accent); color: var(--accent-text);
-  }
-  .err {
-    background: color-mix(in srgb, var(--danger) 13%, transparent);
-    color: var(--danger); padding: 10px 12px; border-radius: 10px; font-size: 13.5px;
-  }
-</style>
-</head>
-<body>
-<form method="post" action="/login">
-  <div>
-    <h1>loci</h1>
-    <p class="sub">Sign in to control device location.</p>
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<div class="govuk-grid-row">
+  <div class="govuk-grid-column-two-thirds">
+
+    {% if error %}
+    <div class="govuk-error-summary" data-module="govuk-error-summary">
+      <div role="alert">
+        <h2 class="govuk-error-summary__title">There is a problem</h2>
+        <div class="govuk-error-summary__body">
+          <ul class="govuk-list govuk-error-summary__list">
+            <li><a href="#username">{{ error }}</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <h1 class="govuk-heading-l">Sign in</h1>
+    <p class="govuk-body">You need an account to control device location.</p>
+
+    <form method="post" action="/login">
+      <div class="govuk-form-group">
+        <label class="govuk-label" for="username">Username</label>
+        <input class="govuk-input govuk-input--width-20" id="username" name="username" type="text"
+               autocomplete="username" autocapitalize="none" autocorrect="off" required autofocus>
+      </div>
+      <div class="govuk-form-group">
+        <label class="govuk-label" for="password">Password</label>
+        <input class="govuk-input govuk-input--width-20" id="password" name="password" type="password"
+               autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="govuk-button" data-module="govuk-button">Sign in</button>
+    </form>
+
   </div>
-  {% if error %}<div class="err">{{ error }}</div>{% endif %}
-  <div>
-    <label for="u">Username</label>
-    <input id="u" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" required autofocus>
-  </div>
-  <div>
-    <label for="p">Password</label>
-    <input id="p" name="password" type="password" autocomplete="current-password" required>
-  </div>
-  <button type="submit">Sign in</button>
-</form>
-</body>
-</html>
+</div>
+{% endblock %}

@@ -1,0 +1,265 @@
+/* GDS Transport is licensed for government use, so the font files are not
+   shipped and govuk-frontend's @font-face rules 404 against this server.
+   Point the family at a local face instead: same fallback, no requests. */
+@font-face { font-family: "GDS Transport"; src: local("Arial"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "GDS Transport"; src: local("Arial Bold"), local("Arial-Bold"), local("Arial"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "GDS Transport"; src: local("Arial Italic"), local("Arial"); font-weight: 400; font-style: italic; font-display: swap; }
+
+/* govuk-frontend only sets fonts on its own classes, never on <body>, so any
+   custom component using `font-family: inherit` falls back to the browser
+   default (Times). Set it once at the root. */
+body, .loci-header__menu, .loci-place, #results button {
+  font-family: "GDS Transport", arial, sans-serif;
+}
+
+/* ---------------------------------------------------------------- header
+   GOV.UK's homepage header is not part of govuk-frontend, so it is rebuilt
+   here: blue bar, yellow menu button when open, grey panel beneath. */
+.loci-header { background: #1d70b8; }
+.loci-header__inner {
+  display: flex; align-items: stretch; justify-content: space-between; min-height: 58px;
+}
+.loci-header__brand {
+  display: flex; align-items: center; color: #fff; text-decoration: none;
+  font-weight: 700; font-size: 1.875rem; line-height: 1;
+  font-family: "GDS Transport", arial, sans-serif; letter-spacing: -0.01em;
+}
+.loci-header__brand:hover { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 3px; }
+.loci-header__brand:focus { background: #fd0; color: #0b0c0c; outline: 3px solid transparent; }
+
+.loci-header__menu {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 20px; border: 0; cursor: pointer;
+  background: transparent; color: #fff;
+  font-family: "GDS Transport", arial, sans-serif; font-size: 1.125rem; font-weight: 700;
+  border-bottom: 4px solid transparent;
+}
+.loci-header__menu:hover { border-bottom-color: rgba(255,255,255,.6); }
+.loci-header__menu:focus { background: #fd0; color: #0b0c0c; outline: 3px solid transparent; border-bottom-color: #0b0c0c; }
+.loci-header__menu--open { background: #fd0; color: #0b0c0c; border-bottom-color: #0b0c0c; }
+.loci-header__chev { transition: transform .15s ease; }
+.loci-header__menu--open .loci-header__chev { transform: rotate(180deg); }
+
+.loci-menu { background: #f3f2f1; border-bottom: 1px solid #b1b4b6; padding: 30px 0 10px; }
+.loci-menu__heading {
+  font-family: "GDS Transport", arial, sans-serif; font-weight: 700;
+  font-size: 1.5rem; margin: 0 0 15px; color: #0b0c0c;
+}
+.loci-menu__list { list-style: none; margin: 0 0 25px; padding: 0; }
+.loci-menu__list li { margin-bottom: 16px; }
+.loci-menu__link {
+  display: inline-block; color: #1d70b8; font-weight: 700; font-size: 1.125rem;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.loci-menu__link:hover { color: #003078; }
+.loci-menu__link:focus { background: #fd0; color: #0b0c0c; box-shadow: 0 -2px #fd0, 0 4px #0b0c0c; outline: 3px solid transparent; text-decoration: none; }
+.loci-menu__link--button { border: 0; background: none; padding: 0; cursor: pointer; font-family: inherit; }
+.loci-menu__form { display: inline; margin: 0; }
+.loci-menu__desc {
+  display: block; color: #505a5f; font-size: 1rem; margin-top: 2px;
+  font-family: "GDS Transport", arial, sans-serif;
+}
+
+/* govuk-frontend ships no global box-sizing reset (one border-box rule in the
+   whole file, scoped to notification banners), so `width:100%` plus padding or
+   a border overflows the viewport. Scope border-box to our own components
+   rather than resetting globally, which would resize GOV.UK's own. */
+.loci-place,
+.loci-cards tr,
+.loci-cards td,
+.loci-places,
+.loci-places__scroll,
+.loci-confirm,
+.loci-mapwrap,
+.loci-status > div,
+#results,
+#results button { box-sizing: border-box; }
+
+/* govuk-frontend sets `display:inline-block` on .govuk-button, and an author
+   rule beats the UA stylesheet's [hidden]{display:none} — so the `hidden`
+   attribute silently does nothing on any GOV.UK component. Restore it. */
+[hidden] { display: none !important; }
+
+/* GOV.UK caps its container at 1020px for reading. This is a control panel
+   with a map in it, so let the shell use the viewport and keep prose columns
+   constrained with grid classes instead. */
+.govuk-width-container { max-width: none; }
+@media (min-width: 60em) { .govuk-width-container { margin-left: 40px; margin-right: 40px; } }
+
+/* ------------------------------------------------- one-screen app shell */
+.loci-app { display: grid; gap: 24px; grid-template-columns: 1fr; }
+.loci-side, .loci-main { min-width: 0; }
+
+@media (min-width: 60em) {
+  /* Everything the operator needs without scrolling: the confirm step sits
+     over the map rather than below it, so committing never needs a scroll. */
+  .loci-app {
+    grid-template-columns: minmax(300px, 380px) 1fr;
+    height: calc(100vh - 150px);
+  }
+  .loci-side, .loci-main { display: flex; flex-direction: column; min-height: 0; }
+  .loci-places { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .loci-places__scroll { flex: 1; min-height: 0; max-height: none; }
+  .loci-mapwrap { flex: 1; min-height: 0; }
+}
+
+/* ------------------------------------------------------------------ map */
+.loci-mapwrap { position: relative; display: flex; flex-direction: column; }
+#map { flex: 1; min-height: 360px; border: 2px solid #0b0c0c; }
+
+/* MapLibre's controls default to rounded translucent chrome; square them off
+   and give them GOV.UK focus behaviour so they match the rest of the page. */
+.maplibregl-ctrl-group { border-radius: 0 !important; box-shadow: 0 0 0 1px rgba(0,0,0,.2) !important; }
+.maplibregl-ctrl-group button { border-radius: 0 !important; }
+.maplibregl-ctrl-group button:focus {
+  background: #fd0 !important; box-shadow: inset 0 0 0 3px #0b0c0c !important; outline: 3px solid transparent;
+}
+.maplibregl-ctrl-attrib {
+  font-family: "GDS Transport", arial, sans-serif !important; font-size: .75rem !important;
+}
+.maplibregl-ctrl-attrib a { color: #1d70b8; }
+
+.loci-search { position: relative; }
+#results {
+  position: absolute; left: 0; right: 0; top: 100%; z-index: 900;
+  background: #fff; border: 2px solid #0b0c0c; border-top: 0; display: none;
+  max-height: 260px; overflow-y: auto;
+}
+#results button {
+  display: block; width: 100%; text-align: left; padding: 10px 12px;
+  border: 0; border-bottom: 1px solid #b1b4b6; background: #fff;
+  font-family: inherit; font-size: 1rem; cursor: pointer;
+}
+#results button:last-child { border-bottom: 0; }
+#results button:hover { background: #f3f2f1; }
+#results button:focus { background: #fd0; outline: 3px solid transparent; }
+
+/* ------------------------------------------------------- saved locations */
+.loci-places { border: 1px solid #b1b4b6; background: #fff; }
+.loci-places__scroll { max-height: 340px; overflow-y: auto; }
+.loci-place {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 12px 15px; border: 0; border-bottom: 1px solid #f3f2f1; background: #fff;
+  font-family: inherit; font-size: 1rem;
+}
+.loci-place:last-child { border-bottom: 0; }
+.loci-place:hover { background: #f3f2f1; }
+.loci-place:focus { background: #fd0; outline: 3px solid transparent; box-shadow: inset 0 0 0 3px #0b0c0c; }
+.loci-place[aria-current="true"] { box-shadow: inset 4px 0 0 #1d70b8; font-weight: 700; }
+.loci-place__name {
+  display: block; font-weight: 700; color: #0b0c0c;
+  font-family: "GDS Transport", arial, sans-serif;
+}
+.loci-place__coords {
+  display: block; color: #505a5f; font-size: .875rem; font-variant-numeric: tabular-nums;
+  font-family: "GDS Transport", arial, sans-serif;
+}
+.loci-places__empty {
+  padding: 15px; color: #505a5f; font-family: "GDS Transport", arial, sans-serif;
+}
+
+/* ------------------------------------------------------------- confirm  */
+.loci-confirm {
+  border: 2px solid #0b0c0c; border-left: 10px solid #1d70b8;
+  background: #fff; padding: 16px 18px; margin-top: 16px;
+}
+
+/* Only the fixed-height desktop shell floats the card over the map. On a phone
+   that would cover the map it is describing, so it stays in normal flow. */
+@media (min-width: 60em) {
+  .loci-confirm {
+    position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 500;
+    margin-top: 0; box-shadow: 0 4px 14px rgba(0,0,0,.25);
+  }
+}
+.loci-confirm__title {
+  margin: 0 0 6px; font-size: 1.25rem; font-weight: 700;
+  font-family: "GDS Transport", arial, sans-serif;
+}
+.loci-confirm__address {
+  margin: 0 0 15px; color: #0b0c0c; font-family: "GDS Transport", arial, sans-serif;
+}
+.loci-confirm__coords {
+  margin: 0 0 4px; color: #505a5f; font-variant-numeric: tabular-nums;
+  font-family: "GDS Transport", arial, sans-serif;
+}
+
+/* -------------------------------------------------------------- bits ---- */
+.loci-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.loci-actions .govuk-button { margin-bottom: 0; }
+.loci-spinner {
+  display: inline-block; width: 14px; height: 14px; margin-right: 8px;
+  vertical-align: -2px; border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: loci-spin .7s linear infinite;
+}
+@keyframes loci-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .loci-spinner { animation-duration: 2.5s; } }
+.govuk-table__cell--num, .loci-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ------------------------------------------------------------ overview  */
+.loci-status { margin: 0 0 20px; border-top: 1px solid #b1b4b6; }
+.loci-status > div {
+  display: grid; grid-template-columns: 110px 1fr; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid #b1b4b6; align-items: baseline;
+}
+.loci-status dt { color: #505a5f; font-size: .875rem; }
+.loci-status dd {
+  margin: 0; color: #0b0c0c; font-size: .9375rem; overflow-wrap: anywhere;
+  font-family: "GDS Transport", arial, sans-serif;
+}
+/* A summary row's action reads as a link in GDS, not a chunky button. */
+.loci-linkbtn {
+  display: block; margin-top: 6px; padding: 0; border: 0; background: none;
+  cursor: pointer; text-align: left;
+  font-family: "GDS Transport", arial, sans-serif; font-size: .9375rem;
+  color: #1d70b8; text-decoration: underline; text-underline-offset: 2px;
+}
+.loci-linkbtn:hover { color: #003078; }
+.loci-linkbtn:focus {
+  background: #fd0; color: #0b0c0c; outline: 3px solid transparent;
+  box-shadow: 0 -2px #fd0, 0 4px #0b0c0c; text-decoration: none;
+}
+
+.loci-theme-btn {
+  width: 29px; height: 29px; border: 0; background: none; cursor: pointer;
+  font-size: 15px; line-height: 1; color: #0b0c0c;
+}
+
+/* ------------------------------------------------------------- mobile  */
+/* GOV.UK ships no responsive table. Sideways scrolling hides the action
+   buttons and truncates values, so below the breakpoint each row becomes a
+   labelled card instead, using the header text carried in data-label. */
+@media (max-width: 40.0525em) {
+  .loci-cards thead { display: none; }
+  .loci-cards,
+  .loci-cards tbody,
+  .loci-cards tr,
+  .loci-cards td { display: block; }
+  .loci-cards { border-collapse: collapse; }
+  .loci-cards tr {
+    border: 1px solid #b1b4b6; border-left: 5px solid #1d70b8;
+    padding: 12px 14px; margin-bottom: 14px; background: #fff;
+  }
+  .loci-cards td { border: 0; padding: 4px 0; }
+  .loci-cards td::before {
+    content: attr(data-label);
+    display: block; color: #505a5f; font-size: .8125rem; margin-bottom: 1px;
+    font-family: "GDS Transport", arial, sans-serif;
+  }
+  .loci-cards td[data-label="Name"] { font-weight: 700; font-size: 1.125rem; }
+  .loci-cards td[data-label="Actions"] { padding-top: 10px; }
+  .loci-cards .loci-actions { gap: 10px; align-items: center; }
+  .loci-cards .govuk-link { padding: 6px 0; }
+}
+
+/* Used where the map is not inside the fixed-height shell. */
+.loci-map--standalone { height: 380px; }
+@media (min-width: 40.0625em) { .loci-map--standalone { height: 520px; } }
+
+@media (max-width: 59.99em) {
+  /* Stacked layout: keep the list short so the map is not buried. */
+  .loci-places__scroll { max-height: 240px; }
+  #map { min-height: 340px; }
+  .loci-header__brand { font-size: 1.5rem; }
+  .loci-status > div { grid-template-columns: 96px 1fr; }
+}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Saved locations{% endblock %}
+
+{% block content %}
+<div id="error" hidden>
+  <div class="govuk-error-summary" data-module="govuk-error-summary">
+    <div role="alert">
+      <h2 class="govuk-error-summary__title">There is a problem</h2>
+      <div class="govuk-error-summary__body"><p class="govuk-body" id="error-text"></p></div>
+    </div>
+  </div>
+</div>
+
+<h1 class="govuk-heading-l">Saved locations</h1>
+
+<a href="/locations/new" role="button" draggable="false"
+   class="govuk-button" data-module="govuk-button">Add a location</a>
+
+{% if locations %}
+<table class="govuk-table loci-cards">
+  <caption class="govuk-table__caption govuk-visually-hidden">Your saved locations</caption>
+  <thead class="govuk-table__head">
+    <tr class="govuk-table__row">
+      <th scope="col" class="govuk-table__header">Name</th>
+      <th scope="col" class="govuk-table__header">Latitude</th>
+      <th scope="col" class="govuk-table__header">Longitude</th>
+      <th scope="col" class="govuk-table__header"><span class="govuk-visually-hidden">Actions</span></th>
+    </tr>
+  </thead>
+  <tbody class="govuk-table__body">
+    {% for l in locations %}
+    <tr class="govuk-table__row" data-id="{{ l.id }}" data-name="{{ l.name }}">
+      <td class="govuk-table__cell" data-label="Name">{{ l.name }}</td>
+      <td class="govuk-table__cell govuk-table__cell--num" data-label="Latitude">{{ '%.6f'|format(l.lat) }}</td>
+      <td class="govuk-table__cell govuk-table__cell--num" data-label="Longitude">{{ '%.6f'|format(l.lon) }}</td>
+      <td class="govuk-table__cell" data-label="Actions">
+        <div class="loci-actions">
+          <button class="govuk-button govuk-button--secondary govuk-!-margin-bottom-0 js-set">Set</button>
+          <a class="govuk-link govuk-!-margin-left-2" href="/locations/{{ l.id }}/edit">Edit<span class="govuk-visually-hidden"> {{ l.name }}</span></a>
+          <a class="govuk-link govuk-!-margin-left-2" href="/locations/{{ l.id }}/delete">Delete<span class="govuk-visually-hidden"> {{ l.name }}</span></a>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="govuk-body">You have no saved locations.</p>
+{% endif %}
+
+<p class="govuk-body-s" role="status" aria-live="polite" id="live"></p>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+import { api, busy, clearProblem } from "{{ url_for('static', filename='loci.js') }}";
+const live = document.getElementById("live");
+
+document.querySelectorAll(".js-set").forEach(btn => {
+  btn.onclick = async () => {
+    const row = btn.closest("tr");
+    clearProblem();
+    busy(btn, true, "Setting");
+    const d = await api("/set", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(row.dataset.id) })
+    });
+    busy(btn, false, "Set");
+    if (d && d.ok) live.textContent = "Location set to " + row.dataset.name + ".";
+  };
+});
+</script>
+{% endblock %}

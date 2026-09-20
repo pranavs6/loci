@@ -1,200 +1,338 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>loci</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+{% extends "base.html" %}
+{% block title %}Device location{% endblock %}
+{% block head %}
 <style>
-  :root {
-    --bg: #f6f7f9; --panel: #ffffff; --text: #14171a; --muted: #6b7280;
-    --line: #e2e5ea; --accent: #2563eb; --accent-text: #ffffff;
-    --danger: #dc2626; --ok: #059669; --chip: #eef1f5;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0e1116; --panel: #171b22; --text: #e8eaed; --muted: #9aa3af;
-      --line: #262c36; --accent: #3b82f6; --accent-text: #ffffff;
-      --danger: #ef4444; --ok: #10b981; --chip: #222833;
-    }
-  }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-    display: flex; flex-direction: column; height: 100dvh;
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  header {
-    padding: 12px 16px calc(12px + env(safe-area-inset-top)) 16px;
-    padding-top: calc(12px + env(safe-area-inset-top));
-    display: flex; align-items: center; gap: 10px;
-    background: var(--panel); border-bottom: 1px solid var(--line);
-  }
-  h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
-  #pill {
-    margin-left: auto; font-size: 12px; font-weight: 600; padding: 5px 10px;
-    border-radius: 999px; background: var(--chip); color: var(--muted);
-    white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis;
-  }
-  #pill.on { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
-  #out {
-    margin-left: 8px; padding: 5px 9px; font-size: 13px; line-height: 1;
-    border-radius: 8px; border: 1px solid var(--line);
-    background: var(--chip); color: var(--muted);
-  }
-  .search { padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: relative; }
-  input[type=text] {
-    width: 100%; padding: 11px 12px; font-size: 16px; color: var(--text);
-    background: var(--bg); border: 1px solid var(--line); border-radius: 10px; outline: none;
-  }
-  input[type=text]:focus { border-color: var(--accent); }
-  #results {
-    position: absolute; left: 16px; right: 16px; top: 100%; z-index: 900;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,.18); display: none;
-  }
-  #results div { padding: 11px 12px; border-bottom: 1px solid var(--line); font-size: 14px; }
-  #results div:last-child { border-bottom: 0; }
-  #results div:active { background: var(--chip); }
-  #map { flex: 1; min-height: 180px; }
-  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; background: var(--panel); border-top: 1px solid var(--line); }
-  .chips button {
-    flex: 0 0 auto; padding: 8px 14px; font-size: 14px; border-radius: 999px;
-    border: 1px solid var(--line); background: var(--chip); color: var(--text);
-  }
-  footer { padding: 12px 16px; background: var(--panel); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 9px; }
-  .coords { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; }
-  .row { display: flex; gap: 9px; }
-  .btn { flex: 1; padding: 14px; font-size: 16px; font-weight: 600; border-radius: 12px; border: 0; }
-  .primary { background: var(--accent); color: var(--accent-text); }
-  .ghost { background: var(--chip); color: var(--text); border: 1px solid var(--line); }
-  .danger { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
-  .btn:disabled { opacity: .45; }
+  /* this page is a fixed-height shell, so trim the standard wrapper padding */
+  @media (min-width: 60em) { .govuk-main-wrapper { padding-top: 20px; padding-bottom: 20px; } }
 </style>
-</head>
-<body>
-<header>
-  <h1>loci</h1>
-  <span id="pill">checking…</span>
-  <form method="post" action="/logout" style="margin:0">
-    <button type="submit" id="out" title="Sign out {{ username }}">⏻</button>
-  </form>
-</header>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.10.0/dist/maplibre-gl.css">
+{% endblock %}
 
-<div class="search">
-  <input id="q" type="text" placeholder="Search an address or place" autocomplete="off" autocorrect="off" spellcheck="false">
-  <div id="results"></div>
+{% block content %}
+<div class="loci-app">
+
+  <aside class="loci-side">
+    <div id="error" hidden>
+      <div class="govuk-error-summary govuk-!-margin-bottom-4" data-module="govuk-error-summary">
+        <div role="alert">
+          <h2 class="govuk-error-summary__title">There is a problem</h2>
+          <div class="govuk-error-summary__body"><p class="govuk-body" id="error-text"></p></div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="govuk-heading-s govuk-!-margin-bottom-2">Overview</h2>
+    <dl class="loci-status">
+      <div>
+        <dt>Status</dt>
+        <dd><strong class="govuk-tag govuk-tag--grey" id="st-tag">Checking</strong></dd>
+      </div>
+      <div><dt>Source</dt><dd id="st-source">—</dd></div>
+      <div><dt>Coordinates</dt><dd class="loci-num" id="st-coords">—</dd></div>
+      <div><dt>Address</dt><dd id="st-address">—</dd></div>
+      <div>
+        <dt>Name</dt>
+        <dd>
+          <span id="st-name">—</span>
+          <button type="button" class="loci-linkbtn" id="st-save" hidden>Save this location</button>
+        </dd>
+      </div>
+    </dl>
+
+    <div id="save-prompt" hidden>
+      <div class="govuk-notification-banner govuk-!-margin-bottom-4" role="region"
+           aria-labelledby="save-title" data-module="govuk-notification-banner">
+        <div class="govuk-notification-banner__header">
+          <h2 class="govuk-notification-banner__title" id="save-title">Not in your list</h2>
+        </div>
+        <div class="govuk-notification-banner__content">
+          <p class="govuk-notification-banner__heading" id="save-coords"></p>
+          <div class="govuk-form-group govuk-!-margin-bottom-3">
+            <label class="govuk-label" for="save-name">Name this location</label>
+            <input class="govuk-input" id="save-name" type="text" maxlength="60">
+          </div>
+          <div class="loci-actions">
+            <button class="govuk-button govuk-!-margin-bottom-0" data-module="govuk-button" id="save-yes">Save</button>
+            <button class="govuk-button govuk-button--secondary govuk-!-margin-bottom-0" data-module="govuk-button" id="save-no">Not now</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="govuk-heading-s govuk-!-margin-bottom-2">Saved locations</h2>
+    <div class="govuk-form-group govuk-!-margin-bottom-2">
+      <label class="govuk-label govuk-visually-hidden" for="filter">Search saved locations</label>
+      <input class="govuk-input" id="filter" type="search" placeholder="Search saved locations"
+             autocomplete="off" autocorrect="off" spellcheck="false">
+    </div>
+    <div class="loci-places">
+      <div class="loci-places__scroll" id="places" role="list"></div>
+    </div>
+    <p class="govuk-body-s govuk-!-margin-top-2 govuk-!-margin-bottom-0">
+      <a class="govuk-link" href="/locations">Manage saved locations</a>
+    </p>
+  </aside>
+
+  <section class="loci-main">
+    <div class="govuk-form-group loci-search govuk-!-margin-bottom-3">
+      <label class="govuk-label govuk-visually-hidden" for="q">Search for an address or place</label>
+      <input class="govuk-input" id="q" type="search" placeholder="Search for an address or place"
+             autocomplete="off" autocorrect="off" spellcheck="false">
+      <div id="results"></div>
+    </div>
+
+    <div class="loci-mapwrap">
+      <div id="map"></div>
+      <div class="loci-confirm" id="confirm" hidden>
+        <p class="loci-confirm__title" id="confirm-title"></p>
+        <p class="loci-confirm__coords loci-num" id="confirm-coords"></p>
+        <p class="loci-confirm__address" id="confirm-address"></p>
+        <div class="loci-actions">
+          <button class="govuk-button govuk-!-margin-bottom-0" data-module="govuk-button" id="confirm-yes">Confirm</button>
+          <button class="govuk-button govuk-button--secondary govuk-!-margin-bottom-0" data-module="govuk-button" id="confirm-no">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="loci-actions govuk-!-margin-top-3">
+      <button class="govuk-button govuk-button--warning govuk-!-margin-bottom-0"
+              data-module="govuk-button" id="clearBtn">Clear location</button>
+    </div>
+  </section>
+
 </div>
+<p class="govuk-visually-hidden" role="status" aria-live="polite" id="live"></p>
+{% endblock %}
 
-<div id="map"></div>
+{% block scripts %}
+<script type="module">
+import { api, busy, problem, clearProblem, createMap, attachSearch }
+  from "{{ url_for('static', filename='loci.js') }}";
 
-<div class="chips">
-  {% for key, label in presets %}<button data-preset="{{ key }}">{{ label }}</button>{% endfor %}
-</div>
+const tag = document.getElementById("st-tag");
+const srcEl = document.getElementById("st-source");
+const coordEl = document.getElementById("st-coords");
+const nameEl = document.getElementById("st-name");
+const confirmBox = document.getElementById("confirm");
+const confirmTitle = document.getElementById("confirm-title");
+const confirmCoords = document.getElementById("confirm-coords");
+const promptBox = document.getElementById("save-prompt");
+const promptCoords = document.getElementById("save-coords");
+const saveName = document.getElementById("save-name");
+const live = document.getElementById("live");
+const addrEl = document.getElementById("st-address");
+const saveBtn = document.getElementById("st-save");
+const confirmAddr = document.getElementById("confirm-address");
 
-<footer>
-  <div class="coords" id="coords">tap the map to choose a point</div>
-  <div class="row">
-    <button class="btn primary" id="setBtn" disabled>Set location</button>
-  </div>
-  <div class="row">
-    <button class="btn ghost" id="refreshBtn">Refresh</button>
-    <button class="btn danger" id="clearBtn">Clear</button>
-  </div>
-</footer>
+const SOURCE_LABELS = { wifi: "Wi-Fi", usb: "USB", offline: "Not connected", unknown: "Unknown" };
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-// Auth rides in an HttpOnly cookie; nothing to attach here.
-const pill = document.getElementById("pill");
-const coords = document.getElementById("coords");
-const setBtn = document.getElementById("setBtn");
-let picked = null;
+let staged = null;      // { lat, lon, id?, name? } awaiting confirmation
+let allPlaces = [];
+let mapApi = null;
 
-const map = L.map("map", { zoomControl: false }).setView([12.9716, 77.5946], 11);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19, attribution: "© OpenStreetMap"
-}).addTo(map);
-L.control.zoom({ position: "bottomleft" }).addTo(map);
-
-let marker = null;
-function pick(lat, lon, fly) {
-  picked = { lat: +lat.toFixed(6), lon: +lon.toFixed(6) };
-  if (marker) marker.setLatLng([lat, lon]);
-  else marker = L.marker([lat, lon], { draggable: true }).addTo(map)
-        .on("dragend", e => { const p = e.target.getLatLng(); pick(p.lat, p.lng, false); });
-  coords.textContent = picked.lat + ", " + picked.lon;
-  setBtn.disabled = false;
-  if (fly) map.setView([lat, lon], Math.max(map.getZoom(), 13));
+/* Browser geolocation needs a secure context. Over http:// on a LAN address
+   it is refused, so treat failure as normal and fall back to a world view. */
+function locate() {
+  return new Promise(resolve => {
+    if (!navigator.geolocation) return resolve(null);
+    const done = pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+    navigator.geolocation.getCurrentPosition(done, () => resolve(null),
+      { timeout: 6000, maximumAge: 300000 });
+  });
 }
-map.on("click", e => pick(e.latlng.lat, e.latlng.lng, false));
+
+/* Reverse geocoding is best-effort: a failure should read as "unavailable",
+   not raise the page's error summary. Hence a bare fetch, not api(). */
+let lastAddrKey = null;
+async function showAddress(el, lat, lon, key) {
+  if (key && key === lastAddrKey) return;
+  if (key) lastAddrKey = key;
+  el.textContent = "Looking up\u2026";
+  try {
+    const r = await fetch("/reverse?lat=" + lat + "&lon=" + lon);
+    const d = await r.json();
+    el.textContent = r.ok && d.ok ? d.address : "Address unavailable";
+  } catch {
+    el.textContent = "Address unavailable";
+  }
+}
+
+let lastStatus = null;
+
+/* The overview link and the naming banner do the same job, so only one shows. */
+function syncSaveButton() {
+  const on = lastStatus && lastStatus.spoofed;
+  saveBtn.hidden = !(on && !lastStatus.name) || !promptBox.hidden;
+}
+
+function renderStatus(d) {
+  lastStatus = d;
+  const on = d.spoofed;
+  tag.textContent = on ? "Active" : "Inactive";
+  tag.className = "govuk-tag " + (on ? "govuk-tag--green" : "govuk-tag--grey");
+  srcEl.textContent = SOURCE_LABELS[d.source] || d.source || "—";
+  coordEl.textContent = on ? d.lat.toFixed(6) + ", " + d.lon.toFixed(6) : "—";
+  nameEl.textContent = on ? (d.name || "Not saved") : "—";
+  syncSaveButton();
+  if (on) {
+    showAddress(addrEl, d.lat, d.lon, d.lat.toFixed(4) + "," + d.lon.toFixed(4));
+  } else {
+    addrEl.textContent = "—";
+    lastAddrKey = null;
+  }
+  highlight(on ? d.name : null);
+}
 
 async function refresh() {
-  try {
-    const r = await fetch("/status");
-    if (r.status === 401) { location.href = "/login"; return; }
-    const d = await r.json();
-    pill.textContent = d.spoofed ? d.output.replace("SPOOFED: ", "") : "not spoofed";
-    pill.className = d.spoofed ? "on" : "";
-  } catch { pill.textContent = "offline"; pill.className = ""; }
+  const d = await api("/status");
+  if (d) renderStatus(d);
+  return d;
 }
 
-async function post(path, body) {
-  setBtn.disabled = true;
-  try {
-    const r = await fetch(path, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body || {})
-    });
-    const d = await r.json();
-    if (!d.ok) alert(d.output || "failed");
-  } catch (e) { alert(String(e)); }
-  setBtn.disabled = !picked;
+function highlight(name) {
+  document.querySelectorAll(".loci-place").forEach(b => {
+    if (name && b.dataset.name === name) b.setAttribute("aria-current", "true");
+    else b.removeAttribute("aria-current");
+  });
+}
+
+function renderPlaces(term) {
+  const box = document.getElementById("places");
+  const t = (term || "").trim().toLowerCase();
+  const list = t ? allPlaces.filter(l => l.name.toLowerCase().includes(t)) : allPlaces;
+  box.innerHTML = "";
+  if (!list.length) {
+    box.innerHTML = '<p class="loci-places__empty">' +
+      (allPlaces.length ? "No matches." : "No saved locations yet.") + "</p>";
+    return;
+  }
+  list.forEach(l => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "loci-place";
+    b.setAttribute("role", "listitem");
+    b.dataset.name = l.name;
+    b.innerHTML = '<span class="loci-place__name"></span><span class="loci-place__coords"></span>';
+    b.querySelector(".loci-place__name").textContent = l.name;
+    b.querySelector(".loci-place__coords").textContent = l.lat.toFixed(4) + ", " + l.lon.toFixed(4);
+    b.onclick = () => stage({ id: l.id, lat: l.lat, lon: l.lon, name: l.name });
+    box.appendChild(b);
+  });
+}
+
+async function loadPlaces() {
+  const list = await api("/api/locations");
+  if (!list) return;
+  allPlaces = list;
+  renderPlaces(document.getElementById("filter").value);
+}
+
+/* Nothing is applied until Confirm: clicking only stages a pin. */
+function stage(point) {
+  staged = point;
+  clearProblem();
+  promptBox.hidden = true;
+  syncSaveButton();
+  mapApi.place(point.lat, point.lon, true, true);
+  confirmTitle.textContent = point.name
+    ? "Set device location to " + point.name + "?"
+    : "Set device location to this point?";
+  confirmCoords.textContent = point.lat.toFixed(6) + ", " + point.lon.toFixed(6);
+  confirmBox.hidden = false;
+  // No-op on desktop, where the card already floats in view.
+  confirmBox.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  confirmAddr.textContent = "";
+  showAddress(confirmAddr, point.lat, point.lon, null);
+  live.textContent = "Ready to confirm " + (point.name || "selected point") + ".";
+}
+
+function unstage() {
+  staged = null;
+  confirmBox.hidden = true;
+}
+
+document.getElementById("confirm-no").onclick = () => { unstage(); refresh(); };
+document.getElementById("confirm-yes").onclick = async ev => {
+  if (!staged) return;
+  const body = staged.id ? { id: staged.id } : { lat: staged.lat, lon: staged.lon };
+  busy(ev.target, true, "Setting");
+  const d = await api("/set", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+  });
+  busy(ev.target, false, "Confirm");
+  if (!d) { refresh(); return; }
+  if (!d.ok) { problem(d.output || "Could not set location."); refresh(); return; }
+  const point = staged;
+  unstage();
+  await refresh();
+  if (!d.known) {
+    staged = { lat: d.lat, lon: d.lon };
+    promptCoords.textContent = d.lat.toFixed(6) + ", " + d.lon.toFixed(6) + " is not in your saved list.";
+    saveName.value = "";
+    promptBox.hidden = false;
+    syncSaveButton();
+    saveName.focus();
+  }
+};
+
+document.getElementById("clearBtn").onclick = async ev => {
+  clearProblem();
+  busy(ev.target, true, "Clearing");
+  await api("/clear", { method: "POST" });
+  busy(ev.target, false, "Clear location");
+  unstage();
+  promptBox.hidden = true;
   refresh();
-}
+};
 
-setBtn.onclick = () => picked && post("/set", picked);
-document.getElementById("clearBtn").onclick = () => post("/clear");
-document.getElementById("refreshBtn").onclick = refresh;
-document.querySelectorAll("[data-preset]").forEach(b => {
-  b.onclick = () => post("/set", { preset: b.dataset.preset });
-});
+document.getElementById("save-no").onclick = () => {
+  promptBox.hidden = true; staged = null; syncSaveButton();
+};
+document.getElementById("save-yes").onclick = async ev => {
+  const name = saveName.value.trim();
+  if (!name) { problem("Enter a name for this location."); saveName.focus(); return; }
+  clearProblem();
+  busy(ev.target, true, "Saving");
+  const d = await api("/api/locations", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, lat: staged.lat, lon: staged.lon })
+  });
+  busy(ev.target, false, "Save to list");
+  if (d) { promptBox.hidden = true; staged = null; syncSaveButton(); await loadPlaces(); refresh(); }
+};
 
-// --- address search (debounced, Nominatim is rate-limited to ~1 req/sec) ---
-const q = document.getElementById("q");
-const results = document.getElementById("results");
-let timer = null;
-q.addEventListener("input", () => {
-  clearTimeout(timer);
-  const term = q.value.trim();
-  if (term.length < 3) { results.style.display = "none"; return; }
-  timer = setTimeout(async () => {
-    try {
-      const r = await fetch("/search?q=" + encodeURIComponent(term));
-      const list = await r.json();
-      if (!Array.isArray(list) || !list.length) { results.style.display = "none"; return; }
-      results.innerHTML = "";
-      list.forEach(item => {
-        const div = document.createElement("div");
-        div.textContent = item.name;
-        div.onclick = () => {
-          results.style.display = "none"; q.value = item.name.split(",")[0];
-          pick(item.lat, item.lon, true);
-        };
-        results.appendChild(div);
-      });
-      results.style.display = "block";
-    } catch { results.style.display = "none"; }
-  }, 600);
-});
-document.addEventListener("click", e => {
-  if (!e.target.closest(".search")) results.style.display = "none";
-});
+saveBtn.onclick = async () => {
+  const d = await api("/status");
+  if (!d || !d.spoofed) return;
+  staged = { lat: d.lat, lon: d.lon };
+  promptCoords.textContent = d.lat.toFixed(6) + ", " + d.lon.toFixed(6) + " is not in your saved list.";
+  saveName.value = "";
+  promptBox.hidden = false;
+  syncSaveButton();
+  saveName.focus();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
 
-refresh();
-setInterval(refresh, 10000);
+document.getElementById("filter").addEventListener("input", e => renderPlaces(e.target.value));
+
+/* ------------------------------------------------------------- start up */
+(async function start() {
+  const st = await refresh();
+  let view = { lat: 20, lon: 0, zoom: 2 };
+  let marker = false;
+  if (st && st.spoofed) {
+    view = { lat: st.lat, lon: st.lon, zoom: 13 };
+    marker = true;
+  } else {
+    const here = await locate();
+    if (here) view = { lat: here.lat, lon: here.lon, zoom: 13 };
+  }
+  mapApi = await createMap("map", (lat, lon) => stage({ lat, lon }), { ...view, marker });
+  attachSearch(document.getElementById("q"), document.getElementById("results"),
+               (lat, lon) => stage({ lat: +lat, lon: +lon }));
+  await loadPlaces();
+  if (st) highlight(st.spoofed ? st.name : null);
+  setInterval(refresh, 10000);
+})();
 </script>
-</body>
-</html>
+{% endblock %}

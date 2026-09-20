@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en" class="govuk-template">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}{% endblock %} - LOCI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d70b8">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/govuk-frontend@6.5.1/dist/govuk/govuk-frontend.min.css">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='loci.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body class="govuk-template__body">
+<script>document.body.className += ' js-enabled';</script>
+<a href="#main-content" class="govuk-skip-link" data-module="govuk-skip-link">Skip to main content</a>
+
+<header class="loci-header">
+  <div class="govuk-width-container loci-header__inner">
+    <a href="/" class="loci-header__brand">LOCI</a>
+    {% if username %}
+    <button type="button" class="loci-header__menu" id="menu-toggle"
+            aria-controls="menu-panel" aria-expanded="false">
+      <svg class="loci-header__chev" width="16" height="10" viewBox="0 0 16 10"
+           fill="none" focusable="false" aria-hidden="true">
+        <path d="M1.5 1.5 8 8l6.5-6.5" stroke="currentColor" stroke-width="2.5"/>
+      </svg>Menu
+    </button>
+    {% endif %}
+  </div>
+</header>
+
+{% if username %}
+<nav class="loci-menu" id="menu-panel" aria-label="Menu" hidden>
+  <div class="govuk-width-container">
+    <div class="govuk-grid-row">
+      <div class="govuk-grid-column-one-half">
+        <h2 class="loci-menu__heading">Device location</h2>
+        <ul class="loci-menu__list">
+          <li><a href="/" class="loci-menu__link">Set location</a>
+              <span class="loci-menu__desc">Choose a point or a saved place</span></li>
+          <li><a href="/locations" class="loci-menu__link">Saved locations</a>
+              <span class="loci-menu__desc">Add, edit and remove places</span></li>
+        </ul>
+      </div>
+      <div class="govuk-grid-column-one-half">
+        <h2 class="loci-menu__heading">Account</h2>
+        <ul class="loci-menu__list">
+          <li><a href="/profile" class="loci-menu__link">Profile</a>
+              <span class="loci-menu__desc">Password and active sessions</span></li>
+          <li><a href="/activity" class="loci-menu__link">Logs</a>
+              <span class="loci-menu__desc">Everything done on this service</span></li>
+          <li>
+            <form method="post" action="/logout" class="loci-menu__form">
+              <button type="submit" class="loci-menu__link loci-menu__link--button">Sign out</button>
+            </form>
+            <span class="loci-menu__desc">Signed in as {{ username }}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</nav>
+{% endif %}
+
+<div class="govuk-width-container">
+  <main class="govuk-main-wrapper" id="main-content" role="main">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script>
+(function () {
+  var btn = document.getElementById("menu-toggle");
+  var panel = document.getElementById("menu-panel");
+  if (!btn || !panel) return;
+  function setOpen(open) {
+    btn.setAttribute("aria-expanded", String(open));
+    btn.classList.toggle("loci-header__menu--open", open);
+    panel.hidden = !open;
+  }
+  btn.addEventListener("click", function () {
+    setOpen(btn.getAttribute("aria-expanded") !== "true");
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && btn.getAttribute("aria-expanded") === "true") {
+      setOpen(false); btn.focus();
+    }
+  });
+})();
+</script>
+<script type="module">
+  import { initAll } from "https://cdn.jsdelivr.net/npm/govuk-frontend@6.5.1/dist/govuk/govuk-frontend.min.js";
+  initAll();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

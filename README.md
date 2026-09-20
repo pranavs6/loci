@@ -32,13 +32,47 @@ loci clear
 
 Presets: `london bangalore mumbai delhi nyc sf tokyo`
 
+The CLI presets are fixed. The web UI keeps its own per-user list in SQLite —
+see Saved locations below.
+
 ## Web UI
 
 `http://<mac-lan-ip>:8787` — map picker, address search, presets. Open it on
 the phone; no cable needed once the Wi-Fi tunnel is up.
 
-Leaflet + OpenStreetMap tiles; search proxies Nominatim through Flask so the
-lookup carries a real User-Agent. Debounced to respect the ~1 req/sec limit.
+MapLibre GL + [OpenFreeMap](https://openfreemap.org) vector tiles (`liberty`
+style) — no API key, no rate limit. Vector rather than raster so labels stay
+crisp at any zoom. The style declares no attribution, so it is added by hand.
+MapLibre v6 ships ESM only (`dist/maplibre-gl.mjs`), hence the module import.
+
+Search proxies Nominatim through Flask so the lookup carries a real
+User-Agent. Debounced to respect the ~1 req/sec limit.
+
+Styled with [govuk-frontend](https://github.com/alphagov/govuk-frontend) 6.5.1
+from a CDN — components only, no Crown logo, no GOV.UK wordmark, no Crown
+copyright. The font files are not shipped, so it falls back to Arial as GDS
+Transport is licensed for government use only.
+
+Pages follow the GDS one-thing-per-page pattern, with Service Navigation as
+the menu: **Set location**, **Saved locations**, **Activity**. Note that v6
+dropped `govuk-header__service-name` and `govuk-header__content` — the service
+name lives in Service Navigation now, and using the v5 markup renders as bare
+unstyled links.
+
+### Saved locations
+
+Per user, in SQLite. Seeded with seven defaults on first sign-in.
+
+- tap a saved place to apply it straight away
+- set an unsaved point and the page offers to name and keep it
+- `/locations` lists them; add and edit are map pages, not latitude/longitude
+  boxes; delete asks for confirmation on its own page
+- **soft delete** — rows keep a `deleted_at` stamp and are never removed, so a
+  location named in the audit log always resolves back to a name. There is no
+  restore button; `store.restore()` exists if you ever need one back
+- names are unique per user among live rows; deleting frees the name, and
+  re-adding it reuses the old row rather than orphaning it
+- coordinates match to 4 decimal places (~11 m) when deciding 'is this saved?'
 
 ### Auth
 
@@ -134,8 +168,11 @@ want the cable.
 ```
 bin/iphone-loc        CLI
 bin/loci-tunnel       Wi-Fi tunnel supervisor (root)
-server/app.py         Flask app
-server/templates/     map picker UI
+server/app.py         Flask app and routes
+server/auth.py        users, sessions, lockout, audit
+server/store.py       saved locations, soft delete
+server/templates/     base + page templates
+server/static/        shared map/helper JS and the few non-GDS styles
 launchd/              LaunchDaemon + LaunchAgent templates
 install.sh            CLI / wifi / daemon / server
 ```

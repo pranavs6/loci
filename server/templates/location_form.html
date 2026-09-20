@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit location' if location else 'Add a location' }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.10.0/dist/maplibre-gl.css">
+{% endblock %}
+
+{% block content %}
+<a href="/locations" class="govuk-back-link">Back to saved locations</a>
+
+<div id="error" hidden>
+  <div class="govuk-error-summary" data-module="govuk-error-summary">
+    <div role="alert">
+      <h2 class="govuk-error-summary__title">There is a problem</h2>
+      <div class="govuk-error-summary__body"><p class="govuk-body" id="error-text"></p></div>
+    </div>
+  </div>
+</div>
+
+<h1 class="govuk-heading-l">{{ 'Edit location' if location else 'Add a location' }}</h1>
+
+<div class="govuk-grid-row">
+  <div class="govuk-grid-column-two-thirds">
+    <div class="govuk-form-group">
+      <label class="govuk-label" for="name">Name</label>
+      <input class="govuk-input govuk-input--width-20" id="name" type="text" maxlength="60"
+             value="{{ location.name if location else '' }}" required>
+    </div>
+
+    <div class="govuk-form-group loci-search">
+      <label class="govuk-label" for="q">Search for an address or place</label>
+      <div id="q-hint" class="govuk-hint">Or drop a pin on the map below.</div>
+      <input class="govuk-input" id="q" type="text" aria-describedby="q-hint"
+             autocomplete="off" autocorrect="off" spellcheck="false">
+      <div id="results"></div>
+    </div>
+  </div>
+</div>
+
+<div id="map" class="loci-map--standalone"></div>
+
+<dl class="govuk-summary-list govuk-!-margin-bottom-6">
+  <div class="govuk-summary-list__row">
+    <dt class="govuk-summary-list__key">Latitude</dt>
+    <dd class="govuk-summary-list__value govuk-table__cell--num" id="lat-out">Not set</dd>
+  </div>
+  <div class="govuk-summary-list__row">
+    <dt class="govuk-summary-list__key">Longitude</dt>
+    <dd class="govuk-summary-list__value govuk-table__cell--num" id="lon-out">Not set</dd>
+  </div>
+</dl>
+
+<div class="loci-actions">
+  <button class="govuk-button" data-module="govuk-button" id="saveBtn">Save location</button>
+  <a href="/locations" class="govuk-button govuk-button--secondary" data-module="govuk-button" role="button" draggable="false">Cancel</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+import { api, busy, problem, clearProblem, createMap, attachSearch }
+  from "{{ url_for('static', filename='loci.js') }}";
+
+const EXISTING = {{ location|tojson if location else 'null' }};
+const latOut = document.getElementById("lat-out");
+const lonOut = document.getElementById("lon-out");
+const nameEl = document.getElementById("name");
+const saveBtn = document.getElementById("saveBtn");
+let picked = EXISTING ? { lat: EXISTING.lat, lon: EXISTING.lon } : null;
+
+const { place } = await createMap("map", (lat, lon) => {
+  picked = { lat, lon };
+  latOut.textContent = lat;
+  lonOut.textContent = lon;
+}, EXISTING ? { lat: EXISTING.lat, lon: EXISTING.lon, zoom: 13, marker: true } : null);
+
+attachSearch(document.getElementById("q"), document.getElementById("results"),
+             (lat, lon) => place(lat, lon, true));
+
+saveBtn.onclick = async () => {
+  clearProblem();
+  const name = nameEl.value.trim();
+  if (!name) { problem("Enter a name for this location."); nameEl.focus(); return; }
+  if (!picked) { problem("Choose a point on the map."); return; }
+  busy(saveBtn, true, "Saving");
+  const body = JSON.stringify({ name, lat: picked.lat, lon: picked.lon });
+  const headers = { "Content-Type": "application/json" };
+  const d = EXISTING
+    ? await api("/api/locations/" + EXISTING.id, { method: "PATCH", headers, body })
+    : await api("/api/locations", { method: "POST", headers, body });
+  busy(saveBtn, false, "Save location");
+  if (d) location.href = "/locations";
+};
+</script>
+{% endblock %}
