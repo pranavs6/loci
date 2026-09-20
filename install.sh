@@ -6,7 +6,10 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PMD="$HOME/.local/bin/pymobiledevice3"
 PLIST=/Library/LaunchDaemons/com.loci.tunneld.plist
 
-[[ -x "$PMD" ]] || { echo "missing $PMD — run: pipx install pymobiledevice3"; exit 1; }
+[[ -x "$PMD" ]] || {
+  echo "missing $PMD — run: uv tool install pymobiledevice3 --python 3.13"
+  echo "(the interpreter matters: see README, Wi-Fi needs python>=3.13 for TLS-PSK)"
+  exit 1; }
 
 mkdir -p "$HOME/.local/bin"
 ln -sf "$REPO/bin/iphone-loc" "$HOME/.local/bin/loci"
@@ -87,7 +90,12 @@ DETECT
   server)
     VENV="$REPO/.venv"
     [[ -x "$VENV/bin/python" ]] || {
-      echo "creating venv"; python3 -m venv "$VENV"; "$VENV/bin/pip" install --quiet flask; }
+      echo "creating venv"; python3 -m venv "$VENV"
+      "$VENV/bin/pip" install --quiet -r "$REPO/requirements.txt"; }
+    if ! "$VENV/bin/python" -c "import sys;sys.path.insert(0,'"'"'$REPO/server'"'"');import auth;sys.exit(0 if auth.has_users() else 1)" 2>/dev/null; then
+      echo "no accounts yet — the server will refuse to bind the LAN."
+      echo "create one:  $VENV/bin/python $REPO/server/app.py adduser <name>"
+    fi
     AGENT="$HOME/Library/LaunchAgents/com.loci.server.plist"
     mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
     sed -e "s|__PYTHON__|$VENV/bin/python|" \

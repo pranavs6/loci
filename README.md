@@ -40,12 +40,25 @@ the phone; no cable needed once the Wi-Fi tunnel is up.
 Leaflet + OpenStreetMap tiles; search proxies Nominatim through Flask so the
 lookup carries a real User-Agent. Debounced to respect the ~1 req/sec limit.
 
-No auth by default — anyone on the network can move your phone. Set a token:
+### Auth
+
+Accounts live in SQLite at `~/.local/state/loci/loci.db` (mode 600). Create one
+before the server will bind anything but loopback:
 
 ```bash
-launchctl setenv LOCI_TOKEN hunter2   # then reinstall the agent
-# open http://<ip>:8787/?t=hunter2
+.venv/bin/python server/app.py adduser pranav
+.venv/bin/python server/app.py users
+.venv/bin/python server/app.py revoke     # kill every session
 ```
+
+- passwords hashed with scrypt; unknown usernames are still hashed so timing
+  does not leak which accounts exist
+- sessions are opaque 32-byte tokens in an HttpOnly, SameSite=Lax cookie;
+  only their SHA-256 is stored, so the database cannot be replayed as a login
+- 10 failed attempts from an IP locks it out for 15 minutes
+- every set / clear / login lands in an `audit` table, readable at `/audit`
+
+Binding a non-loopback address with no accounts is refused outright.
 
 ## Needs
 

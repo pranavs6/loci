@@ -39,6 +39,11 @@
     white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis;
   }
   #pill.on { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  #out {
+    margin-left: 8px; padding: 5px 9px; font-size: 13px; line-height: 1;
+    border-radius: 8px; border: 1px solid var(--line);
+    background: var(--chip); color: var(--muted);
+  }
   .search { padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: relative; }
   input[type=text] {
     width: 100%; padding: 11px 12px; font-size: 16px; color: var(--text);
@@ -73,6 +78,9 @@
 <header>
   <h1>loci</h1>
   <span id="pill">checking…</span>
+  <form method="post" action="/logout" style="margin:0">
+    <button type="submit" id="out" title="Sign out {{ username }}">⏻</button>
+  </form>
 </header>
 
 <div class="search">
@@ -99,8 +107,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const TOKEN = {{ token|tojson }};
-const qs = TOKEN ? ("?t=" + encodeURIComponent(TOKEN)) : "";
+// Auth rides in an HttpOnly cookie; nothing to attach here.
 const pill = document.getElementById("pill");
 const coords = document.getElementById("coords");
 const setBtn = document.getElementById("setBtn");
@@ -126,7 +133,8 @@ map.on("click", e => pick(e.latlng.lat, e.latlng.lng, false));
 
 async function refresh() {
   try {
-    const r = await fetch("/status" + qs);
+    const r = await fetch("/status");
+    if (r.status === 401) { location.href = "/login"; return; }
     const d = await r.json();
     pill.textContent = d.spoofed ? d.output.replace("SPOOFED: ", "") : "not spoofed";
     pill.className = d.spoofed ? "on" : "";
@@ -136,7 +144,7 @@ async function refresh() {
 async function post(path, body) {
   setBtn.disabled = true;
   try {
-    const r = await fetch(path + qs, {
+    const r = await fetch(path, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body || {})
     });
@@ -164,7 +172,7 @@ q.addEventListener("input", () => {
   if (term.length < 3) { results.style.display = "none"; return; }
   timer = setTimeout(async () => {
     try {
-      const r = await fetch("/search" + (TOKEN ? qs + "&" : "?") + "q=" + encodeURIComponent(term));
+      const r = await fetch("/search?q=" + encodeURIComponent(term));
       const list = await r.json();
       if (!Array.isArray(list) || !list.length) { results.style.display = "none"; return; }
       results.innerHTML = "";
