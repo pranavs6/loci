@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.loci.server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>__APP__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LOCI_BIN</key>
+    <string>__LOCI__</string>
+    <key>LOCI_PORT</key>
+    <string>8787</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>__LOG__/loci-server.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG__/loci-server.err</string>
+</dict>
+</plist>

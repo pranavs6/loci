@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.loci.tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>__SCRIPT__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LOCI_STATE</key>
+    <string>__STATE__</string>
+    <!-- launchd gives root /var/root; pairing records live in the user's home -->
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>IPHONE_UDID</key>
+    <string>__UDID__</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/var/log/loci-tunnel.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/log/loci-tunnel.err</string>
+</dict>
+</plist>

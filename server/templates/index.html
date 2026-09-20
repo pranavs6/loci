@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>loci</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #14171a; --muted: #6b7280;
+    --line: #e2e5ea; --accent: #2563eb; --accent-text: #ffffff;
+    --danger: #dc2626; --ok: #059669; --chip: #eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116; --panel: #171b22; --text: #e8eaed; --muted: #9aa3af;
+      --line: #262c36; --accent: #3b82f6; --accent-text: #ffffff;
+      --danger: #ef4444; --ok: #10b981; --chip: #222833;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    display: flex; flex-direction: column; height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  header {
+    padding: 12px 16px calc(12px + env(safe-area-inset-top)) 16px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  #pill {
+    margin-left: auto; font-size: 12px; font-weight: 600; padding: 5px 10px;
+    border-radius: 999px; background: var(--chip); color: var(--muted);
+    white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis;
+  }
+  #pill.on { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .search { padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: relative; }
+  input[type=text] {
+    width: 100%; padding: 11px 12px; font-size: 16px; color: var(--text);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px; outline: none;
+  }
+  input[type=text]:focus { border-color: var(--accent); }
+  #results {
+    position: absolute; left: 16px; right: 16px; top: 100%; z-index: 900;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,.18); display: none;
+  }
+  #results div { padding: 11px 12px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  #results div:last-child { border-bottom: 0; }
+  #results div:active { background: var(--chip); }
+  #map { flex: 1; min-height: 180px; }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; background: var(--panel); border-top: 1px solid var(--line); }
+  .chips button {
+    flex: 0 0 auto; padding: 8px 14px; font-size: 14px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--chip); color: var(--text);
+  }
+  footer { padding: 12px 16px; background: var(--panel); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 9px; }
+  .coords { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; }
+  .row { display: flex; gap: 9px; }
+  .btn { flex: 1; padding: 14px; font-size: 16px; font-weight: 600; border-radius: 12px; border: 0; }
+  .primary { background: var(--accent); color: var(--accent-text); }
+  .ghost { background: var(--chip); color: var(--text); border: 1px solid var(--line); }
+  .danger { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+  .btn:disabled { opacity: .45; }
+</style>
+</head>
+<body>
+<header>
+  <h1>loci</h1>
+  <span id="pill">checking…</span>
+</header>
+
+<div class="search">
+  <input id="q" type="text" placeholder="Search an address or place" autocomplete="off" autocorrect="off" spellcheck="false">
+  <div id="results"></div>
+</div>
+
+<div id="map"></div>
+
+<div class="chips">
+  {% for key, label in presets %}<button data-preset="{{ key }}">{{ label }}</button>{% endfor %}
+</div>
+
+<footer>
+  <div class="coords" id="coords">tap the map to choose a point</div>
+  <div class="row">
+    <button class="btn primary" id="setBtn" disabled>Set location</button>
+  </div>
+  <div class="row">
+    <button class="btn ghost" id="refreshBtn">Refresh</button>
+    <button class="btn danger" id="clearBtn">Clear</button>
+  </div>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const TOKEN = {{ token|tojson }};
+const qs = TOKEN ? ("?t=" + encodeURIComponent(TOKEN)) : "";
+const pill = document.getElementById("pill");
+const coords = document.getElementById("coords");
+const setBtn = document.getElementById("setBtn");
+let picked = null;
+
+const map = L.map("map", { zoomControl: false }).setView([12.9716, 77.5946], 11);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19, attribution: "© OpenStreetMap"
+}).addTo(map);
+L.control.zoom({ position: "bottomleft" }).addTo(map);
+
+let marker = null;
+function pick(lat, lon, fly) {
+  picked = { lat: +lat.toFixed(6), lon: +lon.toFixed(6) };
+  if (marker) marker.setLatLng([lat, lon]);
+  else marker = L.marker([lat, lon], { draggable: true }).addTo(map)
+        .on("dragend", e => { const p = e.target.getLatLng(); pick(p.lat, p.lng, false); });
+  coords.textContent = picked.lat + ", " + picked.lon;
+  setBtn.disabled = false;
+  if (fly) map.setView([lat, lon], Math.max(map.getZoom(), 13));
+}
+map.on("click", e => pick(e.latlng.lat, e.latlng.lng, false));
+
+async function refresh() {
+  try {
+    const r = await fetch("/status" + qs);
+    const d = await r.json();
+    pill.textContent = d.spoofed ? d.output.replace("SPOOFED: ", "") : "not spoofed";
+    pill.className = d.spoofed ? "on" : "";
+  } catch { pill.textContent = "offline"; pill.className = ""; }
+}
+
+async function post(path, body) {
+  setBtn.disabled = true;
+  try {
+    const r = await fetch(path + qs, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    });
+    const d = await r.json();
+    if (!d.ok) alert(d.output || "failed");
+  } catch (e) { alert(String(e)); }
+  setBtn.disabled = !picked;
+  refresh();
+}
+
+setBtn.onclick = () => picked && post("/set", picked);
+document.getElementById("clearBtn").onclick = () => post("/clear");
+document.getElementById("refreshBtn").onclick = refresh;
+document.querySelectorAll("[data-preset]").forEach(b => {
+  b.onclick = () => post("/set", { preset: b.dataset.preset });
+});
+
+// --- address search (debounced, Nominatim is rate-limited to ~1 req/sec) ---
+const q = document.getElementById("q");
+const results = document.getElementById("results");
+let timer = null;
+q.addEventListener("input", () => {
+  clearTimeout(timer);
+  const term = q.value.trim();
+  if (term.length < 3) { results.style.display = "none"; return; }
+  timer = setTimeout(async () => {
+    try {
+      const r = await fetch("/search" + (TOKEN ? qs + "&" : "?") + "q=" + encodeURIComponent(term));
+      const list = await r.json();
+      if (!Array.isArray(list) || !list.length) { results.style.display = "none"; return; }
+      results.innerHTML = "";
+      list.forEach(item => {
+        const div = document.createElement("div");
+        div.textContent = item.name;
+        div.onclick = () => {
+          results.style.display = "none"; q.value = item.name.split(",")[0];
+          pick(item.lat, item.lon, true);
+        };
+        results.appendChild(div);
+      });
+      results.style.display = "block";
+    } catch { results.style.display = "none"; }
+  }, 600);
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest(".search")) results.style.display = "none";
+});
+
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>

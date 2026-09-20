@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""loci-tunnel — keep a Wi-Fi RemotePairing tunnel to the iPhone alive.
+
+Must run as root: the classic tunnel creates a TUN interface. Publishes the
+RSD address to $LOCI_STATE/rsd so the unprivileged `loci` CLI can reach it.
+
+Discovery returns the same device several times (LAN IPv4, global IPv6,
+link-local). The CLI prompts; we rank instead, because only one of them
+reliably completes the TLS-PSK handshake.
+"""
+from __future__ import annotations
+
+import asyncio
+import ipaddress
+import logging
+import os
+import sys
+from pathlib import Path
+
+from pymobiledevice3.remote.tunnel_service import (
+    get_remote_pairing_tunnel_services,
+    start_tunnel,
+)
+
+STATE = Path(os.environ.get("LOCI_STATE") or (Path.home() / ".local/state/loci"))
+RSD_FILE = STATE / "rsd"
+UDID = os.environ.get("IPHONE_UDID") or None
+RETRY_SECONDS = 10
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s loci-tunnel %(levelname)s %(message)s"
+)
+log = logging.getLogger("loci-tunnel")
+
+
+def rank(service) -> int:
+    """Prefer routable LAN IPv4 — the address that actually handshakes."""
+    host = service.hostname
+    if "%" in host:  # link-local, scope-bound
+        return 2
+    try:
+        if isinstance(ipaddress.ip_address(host), ipaddress.IPv4Address):
+            return 0
+    except ValueError:
+        pass
+    return 1  # global IPv6
+
+
+def publish(host: str, port: int) -> None:
+    STATE.mkdir(parents=True, exist_ok=True)
+    RSD_FILE.write_text(f"{host} {port}\n")
+    RSD_FILE.chmod(0o644)  # root writes it, the user's CLI reads it
+
+
+def retract() -> None:
+    RSD_FILE.unlink(missing_ok=True)
+
+
+async def serve_once() -> None:
+    services = await get_remote_pairing_tunnel_services(udid=UDID)
+    if not services:
+        log.info("no tunnel services discovered")
+        return
+    # Discovery lists each device once per address. Without a UDID pin, ranking
+    # sorts on address shape alone, so two paired phones would both rank 0 and
+    # the winner would be whichever discovery happened to return first.
+    identifiers = {s.remote_identifier for s in services}
+    if UDID is None and len(identifiers) > 1:
+        log.error(
+            "%d devices discovered (%s) and IPHONE_UDID is unset; refusing to "
+            "guess. Pin one in the daemon's environment.",
+            len(identifiers),
+            ", ".join(sorted(identifiers)),
+        )
+        return
+    service = sorted(services, key=rank)[0]
+    log.info("selected %s:%s", service.hostname, service.port)
+    async with start_tunnel(service) as result:
+        publish(result.address, result.port)
+        log.info("tunnel up — rsd %s %s", result.address, result.port)
+        try:
+            await result.client.wait_closed()
+        finally:
+            retract()
+            log.info("tunnel closed")
+
+
+async def main() -> None:
+    # An unclean shutdown leaves the last address behind. Until we publish a
+    # real one, a stale file would send `loci` at a dead tunnel instead of
+    # letting it fall back to USB.
+    retract()
+    while True:
+        try:
+            await serve_once()
+        except Exception as exc:  # noqa: BLE001 - keep the supervisor alive
+            retract()
+            log.error("%s: %s", type(exc).__name__, exc)
+        await asyncio.sleep(RETRY_SECONDS)
+
+
+if __name__ == "__main__":
+    if os.geteuid() != 0:
+        sys.exit("loci-tunnel must run as root (the tunnel creates a TUN interface)")
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        retract()

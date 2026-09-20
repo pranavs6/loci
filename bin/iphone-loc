@@ -1,0 +1,118 @@
+#!/bin/bash
+# loci — hold or clear a simulated GPS location on a paired iPhone (iOS 17+).
+#
+# `simulate-location set` never returns: it holds the DVT session open and the
+# spoof dies with the process. So `set` backgrounds a holder and tracks its PID.
+#
+# Connection is either the Wi-Fi tunnel published by loci-tunnel (--rsd) or,
+# failing that, a USB tunnel from tunneld (--tunnel).
+
+set -uo pipefail
+
+PMD="${PMD:-$HOME/.local/bin/pymobiledevice3}"
+TUNNELD="${TUNNELD:-http://127.0.0.1:49151}"
+STATE="${LOCI_STATE:-$HOME/.local/state/loci}"
+PIDFILE="$STATE/holder.pid"
+LOGFILE="$STATE/holder.log"
+WHEREFILE="$STATE/holder.where"
+RSD_FILE="$STATE/rsd"
+CONFIG="$HOME/.config/loci/config"
+
+mkdir -p "$STATE"
+# shellcheck source=/dev/null
+[[ -f "$CONFIG" ]] && source "$CONFIG"
+
+die() { echo "error: $*" >&2; exit 1; }
+
+# Never guess between devices: with more than one attached and no pin set,
+# return nothing rather than picking an arbitrary phone.
+resolve_udid() {
+  [[ -n "${IPHONE_UDID:-}" ]] && { echo "$IPHONE_UDID"; return; }
+  local u
+  u=$(curl -sf --max-time 5 "$TUNNELD" 2>/dev/null \
+      | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(iter(d)) if len(d)==1 else "")' 2>/dev/null)
+  [[ -n "$u" ]] && { echo "$u"; return; }
+  "$PMD" usbmux list 2>/dev/null \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["UniqueDeviceID"] if len(d)==1 else "")' 2>/dev/null
+}
+
+# Sets CONN to the connection flags, preferring the Wi-Fi tunnel.
+conn_args() {
+  local host port udid
+  if [[ -r "$RSD_FILE" ]]; then
+    read -r host port < "$RSD_FILE"
+    if [[ -n "${host:-}" && -n "${port:-}" ]]; then
+      CONN=(--rsd "$host" "$port"); CONN_KIND="wifi"; return 0
+    fi
+  fi
+  udid=$(resolve_udid)
+  [[ -n "$udid" ]] || return 1
+  curl -sf --max-time 5 "$TUNNELD" 2>/dev/null | grep -q "$udid" || return 1
+  CONN=(--tunnel "$udid"); CONN_KIND="usb"; return 0
+}
+
+preset() {
+  case "$1" in
+    london)    echo "51.5007 -0.1246" ;;
+    bangalore) echo "12.9716 77.5946" ;;
+    mumbai)    echo "19.0760 72.8777" ;;
+    delhi)     echo "28.6139 77.2090" ;;
+    nyc)       echo "40.7580 -73.9855" ;;
+    sf)        echo "37.7749 -122.4194" ;;
+    tokyo)     echo "35.6762 139.6503" ;;
+    *) return 1 ;;
+  esac
+}
+
+holder_alive() {
+  [[ -f "$PIDFILE" ]] || return 1
+  ps -p "$(cat "$PIDFILE" 2>/dev/null)" >/dev/null 2>&1
+}
+
+stop_holder() {
+  if holder_alive; then
+    local pid; pid=$(cat "$PIDFILE")
+    kill "$pid" 2>/dev/null
+    for _ in $(seq 1 25); do ps -p "$pid" >/dev/null 2>&1 || break; sleep 0.2; done
+    ps -p "$pid" >/dev/null 2>&1 && kill -9 "$pid" 2>/dev/null
+  fi
+  rm -f "$PIDFILE" "$WHEREFILE"
+}
+
+case "${1:-status}" in
+  set)
+    shift
+    if [[ $# -eq 1 ]]; then
+      coords=$(preset "$1") || die "unknown preset: $1 (see: loci presets)"
+      label="$1"
+    elif [[ $# -eq 2 ]]; then
+      coords="$1 $2"; label="$1,$2"
+    else
+      die "usage: loci set <preset> | loci set <lat> <lon>"
+    fi
+    conn_args || die "no iPhone reachable — is loci-tunnel running, or the phone plugged in?"
+    stop_holder
+    # shellcheck disable=SC2086
+    nohup "$PMD" developer dvt simulate-location set "${CONN[@]}" -- $coords >"$LOGFILE" 2>&1 &
+    echo $! >"$PIDFILE"
+    sleep 3
+    holder_alive || { tail -5 "$LOGFILE" >&2; rm -f "$PIDFILE"; die "holder died on startup"; }
+    echo "$label ($coords)" >"$WHEREFILE"
+    echo "spoofing: $label -> $coords [$CONN_KIND]"
+    ;;
+  clear)
+    stop_holder
+    if conn_args; then
+      timeout 25 "$PMD" developer dvt simulate-location clear "${CONN[@]}" >/dev/null 2>&1
+    fi
+    echo "cleared"
+    ;;
+  status)
+    link="offline"
+    conn_args && link="$CONN_KIND"
+    if holder_alive; then echo "SPOOFED: $(cat "$WHEREFILE" 2>/dev/null || echo unknown) [$link]"
+    else echo "not spoofed [$link]"; fi
+    ;;
+  presets) echo "london bangalore mumbai delhi nyc sf tokyo" ;;
+  *) die "usage: loci {set|clear|status|presets}" ;;
+esac
