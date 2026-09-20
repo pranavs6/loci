@@ -264,20 +264,21 @@ def api_delete(loc_id: int):
 
 # -------------------------------------------------------------------- set
 
-# Reverse lookups repeat constantly (status polls every 10s), and Nominatim
-# asks for ~1 req/sec, so results are cached by rounded coordinate.
-_REVERSE_CACHE: dict[tuple[float, float], str] = {}
-
-
 @app.get("/reverse")
 def reverse():
+    """Reverse geocode, served from SQLite when we have seen the point before.
+
+    Status polls every 10s and Nominatim asks for roughly 1 req/sec, so an
+    in-process cache was not enough: it died with every restart."""
     try:
         lat, lon = coords(request.args)
     except ValueError as exc:
         return jsonify(ok=False, output=str(exc)), 400
-    key = (round(lat, 4), round(lon, 4))
-    if key in _REVERSE_CACHE:
-        return jsonify(ok=True, address=_REVERSE_CACHE[key], cached=True)
+
+    hit = store.cached_address(lat, lon)
+    if hit is not None:
+        return jsonify(ok=True, address=hit, cached=True)
+
     url = "https://nominatim.openstreetmap.org/reverse?" + urllib.parse.urlencode(
         {"lat": lat, "lon": lon, "format": "json", "zoom": 18}
     )
@@ -285,12 +286,15 @@ def reverse():
     try:
         with urllib.request.urlopen(req, timeout=12) as r:
             data = json.load(r)
-    except Exception as exc:  # noqa: BLE001 - surface the failure, do not cache it
+    except Exception as exc:  # noqa: BLE001 - a failure must not be cached
         return jsonify(ok=False, output=str(exc)), 502
-    address = data.get("display_name") or "No address found"
-    if len(_REVERSE_CACHE) > 500:
-        _REVERSE_CACHE.clear()
-    _REVERSE_CACHE[key] = address
+
+    address = data.get("display_name")
+    if not address:
+        # Genuinely no address here (ocean, desert). Cache it so we do not ask
+        # again for the same empty point.
+        address = "No address found"
+    store.cache_address(lat, lon, address)
     return jsonify(ok=True, address=address, cached=False)
 
 

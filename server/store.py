@@ -6,7 +6,7 @@ still appears in the audit log can always be resolved back to a name.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from auth import connection
@@ -39,7 +39,20 @@ CREATE TABLE IF NOT EXISTS locations (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_locations_name
     ON locations(user_id, name) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_locations_user ON locations(user_id, deleted_at);
+
+-- Reverse-geocoded addresses, keyed by rounded coordinate. Shared across
+-- users: an address is a property of the place, not of who looked it up.
+CREATE TABLE IF NOT EXISTS geocache (
+    lat_key    REAL NOT NULL,
+    lon_key    REAL NOT NULL,
+    address    TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (lat_key, lon_key)
+);
 """
+
+# Addresses change rarely; long enough to be useful, short enough to self-correct.
+GEOCACHE_DAYS = 180
 
 
 class StoreError(Exception):
@@ -193,3 +206,38 @@ def seed_defaults(user_id: int) -> int:
             [(user_id, n, la, lo, now, now) for n, la, lo in DEFAULTS],
         )
     return len(DEFAULTS)
+
+
+# ------------------------------------------------------------------ geocache
+
+def _geo_key(lat: float, lon: float) -> tuple[float, float]:
+    return (round(float(lat), MATCH_DP), round(float(lon), MATCH_DP))
+
+
+def cached_address(lat: float, lon: float) -> Optional[str]:
+    lat_key, lon_key = _geo_key(lat, lon)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=GEOCACHE_DAYS)).isoformat()
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT address FROM geocache"
+            " WHERE lat_key = ? AND lon_key = ? AND fetched_at >= ?",
+            (lat_key, lon_key, cutoff),
+        ).fetchone()
+    return row["address"] if row else None
+
+
+def cache_address(lat: float, lon: float, address: str) -> None:
+    lat_key, lon_key = _geo_key(lat, lon)
+    with connection() as conn:
+        conn.execute(
+            "INSERT INTO geocache (lat_key, lon_key, address, fetched_at)"
+            " VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(lat_key, lon_key) DO UPDATE SET"
+            "   address = excluded.address, fetched_at = excluded.fetched_at",
+            (lat_key, lon_key, address, _now()),
+        )
+
+
+def geocache_size() -> int:
+    with connection() as conn:
+        return conn.execute("SELECT COUNT(*) AS n FROM geocache").fetchone()["n"]
