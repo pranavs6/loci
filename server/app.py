@@ -24,7 +24,31 @@ import store
 
 app = Flask(__name__)
 
-LOCI = os.environ.get("LOCI_BIN") or shutil.which("loci") or str(Path.home() / ".local/bin/loci")
+def _load_config() -> dict:
+    """Read ~/.config/loci/config (KEY=value). The file is the source of truth
+    so editing it and restarting a daemon is enough; env still overrides for
+    one-off runs."""
+    path = Path(os.environ.get("LOCI_CONFIG") or (Path.home() / ".config/loci/config"))
+    values: dict[str, str] = {}
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            values[key.strip()] = val.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return values
+
+
+_CONFIG = _load_config()
+
+
+def setting(name: str, default=None):
+    return os.environ.get(name) or _CONFIG.get(name) or default
+
+LOCI = setting("LOCI_BIN") or shutil.which("loci") or str(Path.home() / ".local/bin/loci")
 COOKIE = "loci_session"
 OPEN_PATHS = {"/login", "/healthz", "/favicon.ico"}
 JSON_PATHS = {"/status", "/search", "/reverse", "/audit", "/set", "/clear"}
@@ -388,11 +412,11 @@ if __name__ == "__main__":
         raise SystemExit(_cli())
     auth.init_db()
     store.init_db()
-    host = os.environ.get("LOCI_HOST", "0.0.0.0")
+    host = setting("LOCI_HOST", "0.0.0.0")
     if host not in {"127.0.0.1", "localhost", "::1"} and not auth.has_users():
         raise SystemExit(
             "refusing to bind %s with no accounts — create one first:\n"
             "  python server/app.py adduser <name>\n"
             "(or set LOCI_HOST=127.0.0.1 for loopback-only)" % host
         )
-    app.run(host=host, port=int(os.environ.get("LOCI_PORT", "8787")), threaded=True)
+    app.run(host=host, port=int(setting("LOCI_PORT", "8787")), threaded=True)

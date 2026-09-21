@@ -65,13 +65,17 @@ DETECT
       echo "  mkdir -p ~/.config/loci && echo 'IPHONE_UDID=<udid>' >> ~/.config/loci/config" >&2
       exit 1
     fi
+    mkdir -p "$HOME/.config/loci"
+    if ! grep -q '^IPHONE_UDID=' "$HOME/.config/loci/config" 2>/dev/null; then
+      echo "IPHONE_UDID=$UDID" >> "$HOME/.config/loci/config"
+      echo "wrote IPHONE_UDID to ~/.config/loci/config"
+    fi
     echo "pinned device: $UDID"
     rm -f "$HOME/.local/state/loci/rsd"   # never accept a stale address as success
     sed -e "s|__PYTHON__|$PMDPY|" \
         -e "s|__SCRIPT__|$REPO/bin/loci-tunnel|" \
         -e "s|__STATE__|$HOME/.local/state/loci|" \
         -e "s|__HOME__|$HOME|" \
-        -e "s|__UDID__|$UDID|" \
         "$REPO/launchd/com.loci.tunnel.plist.template" | sudo tee "$PLIST_W" >/dev/null
     sudo chown root:wheel "$PLIST_W"; sudo chmod 644 "$PLIST_W"
     sudo launchctl bootout system/com.loci.tunnel 2>/dev/null || true

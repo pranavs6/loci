@@ -2,6 +2,8 @@
 
 Spoof GPS on a paired iPhone from macOS. iOS 17+, no jailbreak.
 
+Setting up from scratch or adding a phone: **[SETUP.md](SETUP.md)**.
+
 ## Install
 
 ```bash
