@@ -178,3 +178,7 @@ server/static/        shared map/helper JS and the few non-GDS styles
 launchd/              LaunchDaemon + LaunchAgent templates
 install.sh            CLI / wifi / daemon / server
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
