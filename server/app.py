@@ -21,32 +21,10 @@ from flask import Flask, g, jsonify, redirect, render_template, request, url_for
 
 import auth
 import store
+from loci_config import setting
 
 app = Flask(__name__)
 
-def _load_config() -> dict:
-    """Read ~/.config/loci/config (KEY=value). The file is the source of truth
-    so editing it and restarting a daemon is enough; env still overrides for
-    one-off runs."""
-    path = Path(os.environ.get("LOCI_CONFIG") or (Path.home() / ".config/loci/config"))
-    values: dict[str, str] = {}
-    try:
-        for line in path.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            values[key.strip()] = val.strip().strip('"').strip("'")
-    except OSError:
-        pass
-    return values
-
-
-_CONFIG = _load_config()
-
-
-def setting(name: str, default=None):
-    return os.environ.get(name) or _CONFIG.get(name) or default
 
 LOCI = setting("LOCI_BIN") or shutil.which("loci") or str(Path.home() / ".local/bin/loci")
 COOKIE = "loci_session"
@@ -211,7 +189,7 @@ def profile():
 
 @app.get("/activity")
 def activity_page():
-    return render_template("activity.html", rows=auth.recent_audit(), **_nav("activity"))
+    return render_template("activity.html", rows=auth.recent_audit(g.user_id), **_nav("activity"))
 
 
 # `loci status` prints either
@@ -246,7 +224,7 @@ def status():
 
 @app.get("/audit")
 def audit():
-    return jsonify(auth.recent_audit())
+    return jsonify(auth.recent_audit(g.user_id))
 
 
 # ---------------------------------------------------------------- locations
@@ -326,7 +304,11 @@ def reverse():
 def set_location():
     data = request.get_json(silent=True) or {}
     if data.get("id") is not None:
-        loc = store.get_location(g.user_id, int(data["id"]))
+        try:
+            loc_id = int(data["id"])
+        except (TypeError, ValueError):
+            return jsonify(ok=False, output="id must be an integer"), 400
+        loc = store.get_location(g.user_id, loc_id)
         if loc is None:
             return jsonify(ok=False, output="no such location"), 404
         lat, lon, saved = loc["lat"], loc["lon"], loc

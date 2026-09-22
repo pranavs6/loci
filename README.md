@@ -96,6 +96,14 @@ before the server will bind anything but loopback:
 
 Binding a non-loopback address with no accounts is refused outright.
 
+**Threat model.** The server is plain HTTP, so the session cookie cannot
+carry the `Secure` flag and your password and session token cross the
+network in cleartext. That is acceptable on a home network or your own
+phone's hotspot, where the only people who can sniff it could also walk up
+to the Mac. It is not acceptable on shared or public Wi-Fi: anyone on that
+network can take over your session and move your phone. Keep it on
+`LOCI_HOST=127.0.0.1` there, or put it behind HTTPS.
+
 ## Needs
 
 - Developer Mode on — Settings → Privacy & Security

@@ -18,10 +18,11 @@ from typing import Optional
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-DB_PATH = Path(
-    os.environ.get("LOCI_DB")
-    or (Path(os.environ.get("LOCI_STATE") or (Path.home() / ".local/state/loci")) / "loci.db")
-)
+from loci_config import setting, state_dir
+
+# Must honour the config file like everything else, or moving LOCI_STATE there
+# moves the tunnel and CLI but silently leaves the database behind.
+DB_PATH = Path(setting("LOCI_DB") or (state_dir() / "loci.db"))
 SESSION_DAYS = 30
 MAX_FAILURES = 10
 LOCKOUT_MINUTES = 15
@@ -73,6 +74,9 @@ def connection():
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # Flask runs threaded. In the default rollback journal a writer locks out
+    # readers; WAL lets status polls read while a set or login is writing.
+    conn.execute("PRAGMA journal_mode = WAL")
     try:
         yield conn
         conn.commit()
@@ -81,6 +85,11 @@ def connection():
 
 
 def init_db() -> None:
+    # Create the file 600 before SQLite ever opens it. SQLite derives the -wal
+    # and -shm modes from the database file, so a chmod afterwards is too late
+    # for whichever of those already exists.
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DB_PATH.touch(mode=0o600, exist_ok=True)
     with connection() as conn:
         conn.executescript(SCHEMA)
     DB_PATH.chmod(0o600)
@@ -249,13 +258,22 @@ def log(user_id: Optional[int], action: str, detail: str = "", ip: str = "") -> 
         )
 
 
-def recent_audit(limit: int = 50) -> list[dict]:
+def recent_audit(user_id: int, limit: int = 50) -> list[dict]:
+    """The caller's own activity, plus failed sign-ins against their username.
+
+    A failed login has no user_id (the account is not known yet) and records
+    the attempted name in `detail`. Filtering on user_id alone would hide
+    "someone tried to sign in as you", the one row a user most needs to see."""
     with connection() as conn:
+        row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        name = row["username"] if row else None
         rows = conn.execute(
             "SELECT a.at, a.action, a.detail, a.ip, COALESCE(u.username,'-') AS username"
             " FROM audit a LEFT JOIN users u ON u.id = a.user_id"
+            " WHERE a.user_id = ?"
+            "    OR (a.user_id IS NULL AND a.action = 'login_failed' AND a.detail = ?)"
             " ORDER BY a.id DESC LIMIT ?",
-            (limit,),
+            (user_id, name, limit),
         ).fetchall()
     return [dict(r) for r in rows]
 

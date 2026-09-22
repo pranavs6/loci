@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: shellcheck -S warning bin/iphone-loc install.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # bin/loci-tunnel has no .py suffix, so compileall would skip it.
+      - name: python compiles
+        run: |
+          python -m compileall -q server
+          python -m py_compile bin/loci-tunnel
+
+      - name: templates parse
+        run: |
+          pip install --quiet -r requirements.txt
+          python - <<'PY'
+          from pathlib import Path
+          from jinja2 import Environment, FileSystemLoader
+          env = Environment(loader=FileSystemLoader("server/templates"))
+          for t in sorted(Path("server/templates").glob("*.html")):
+              env.get_template(t.name)
+              print("ok", t.name)
+          PY

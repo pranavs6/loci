@@ -111,7 +111,8 @@ DETECT
     launchctl bootstrap "gui/$UID" "$AGENT"
     sleep 4
     IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo 127.0.0.1)
-    if curl -sf --max-time 5 "http://127.0.0.1:8787/status" >/dev/null; then
+    # /status needs a session since auth landed; /healthz is the open probe.
+    if curl -sf --max-time 5 "http://127.0.0.1:8787/healthz" >/dev/null; then
       echo "server running — open on your phone:  http://$IP:8787"
     else
       echo "server not answering — check ~/Library/Logs/loci-server.err" >&2; exit 1

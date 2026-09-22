@@ -17,36 +17,17 @@ import os
 import sys
 from pathlib import Path
 
+# Shared with the web server; lives in the repo next to this script.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "server"))
+from loci_config import setting, state_dir  # noqa: E402
+
 from pymobiledevice3.remote.tunnel_service import (
     get_remote_pairing_tunnel_services,
     start_tunnel,
 )
 
-def _load_config() -> dict:
-    """Read ~/.config/loci/config (KEY=value). The file is the source of truth
-    so editing it and restarting a daemon is enough; env still overrides for
-    one-off runs."""
-    path = Path(os.environ.get("LOCI_CONFIG") or (Path.home() / ".config/loci/config"))
-    values: dict[str, str] = {}
-    try:
-        for line in path.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            values[key.strip()] = val.strip().strip('"').strip("'")
-    except OSError:
-        pass
-    return values
 
-
-_CONFIG = _load_config()
-
-
-def setting(name: str, default=None):
-    return os.environ.get(name) or _CONFIG.get(name) or default
-
-STATE = Path(setting("LOCI_STATE", Path.home() / ".local/state/loci"))
+STATE = state_dir()
 RSD_FILE = STATE / "rsd"
 UDID = setting("IPHONE_UDID")
 RETRY_SECONDS = 10
